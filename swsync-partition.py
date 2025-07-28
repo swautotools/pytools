@@ -48,12 +48,16 @@ def process_class_name(class_name):
                 suffix_lower = suffix[0].lower() + suffix[1:].lower()
             else:
                 suffix_lower = ""
-            return f"sw{mapped_type}-{suffix_lower}"
+            return f"{mapped_type}-{suffix_lower}"
     return class_name.lower()
 
 
 def separate_classes(header_file_path):
     split_files = []
+    
+    # 保存原始文件名（不含扩展名）用于后续判断
+    original_basename = os.path.basename(header_file_path).replace(".hpp", "")
+    original_filename = os.path.basename(header_file_path)
     
     if ".cpp" in header_file_path:
         header_file_path = header_file_path.replace(".cpp", ".hpp")
@@ -104,21 +108,28 @@ def separate_classes(header_file_path):
     class_parts = header_content.split('class ')
     class_parts = [part.strip() for part in class_parts if part.strip()]
     include_list = []
-    addstrincludelist = ""
+    other_headers = []  # 存储其他分离出的头文件
     
-    # 生成新头文件的包含语句
+    # 首先收集所有将要生成的头文件
     for i, class_part in enumerate(class_parts):
         if ';' in class_part and '{' not in class_part:  # 跳过前置声明
             continue
+        
         class_name = class_part.split()[0]
         if "#ifndef" in class_part and "#define" in class_part:
+            include_list = class_part
             continue
+        
         if class_name.lower() == filenameClass:
             continue
+            
         processed_name = process_class_name(class_name)
-        addstrincludelist += f"#include \"{processed_name}.hpp\"\r\n"
+        other_headers.append(f"{processed_name}.hpp")
     
-    print("New path header files that need to be included:"+addstrincludelist, file=sys.stdout)
+    # 生成包含其他头文件的语句
+    other_headers_include = "\n".join([f"#include \"{header}\"" for header in other_headers]) + "\n"
+    
+    print("Other header files that need to be included in main header:"+other_headers_include, file=sys.stdout)
     print("--------------------------------------", file=sys.stdout)
     
     for i, class_part in enumerate(class_parts):
@@ -138,7 +149,7 @@ def separate_classes(header_file_path):
         new_cpp_pathr = os.path.abspath(os.path.join(new_dir_name, f"{processed_name}.cpp"))
         
         new_header_content = class_part if i == 0 else f'class {class_part}'
-        is_main_class = (class_name.lower() == filenameClass)
+        is_main_class = (class_name.lower() == filenameClass) or (processed_name == original_basename)
         
         content_to_write = new_header_content
         if not is_main_class and not content_to_write.endswith("#endif"):
@@ -147,8 +158,9 @@ def separate_classes(header_file_path):
         with open(new_header_pathr, 'w', encoding=header_encoding) as f:
             if is_main_class:
                 f.write(f"{include_list}\r\n")
-                f.write(addstrincludelist)
-                f.write(header_includes_str) 
+                f.write(header_includes_str)
+                # 主头文件包含其他所有分离出的头文件
+                f.write(other_headers_include)
                 f.write(content_to_write)
                 if final_endif:
                     f.write(final_endif)
@@ -186,27 +198,35 @@ cache_dir = 'D:\\swauto_classsplit_cache'
 DEFAULT_CLASSTYPE = ""
 # 前缀映射文件名配置列表 - 可扩展
 prefix_mapping = [
-    ["SW", "core"],
-    ["FR", "user"],
-    # 具体规则 如 SW 检测需要分离的类名为 SWTest 输出分离后的文件名为 swcore-test.hpp  swcore-test.cpp
+    ["SW", "swcore"],
+    ["SWA", "swauto"],
+    ["FR", "test"],
 ]
+
+# ############################################## #
+
+# 使用说明:
+# 1.安装 Python 与必要的导入类 chardet 
+# 2.将本 Python 文件(swsync-partition.py)放置于与你的项目.vcxproj 文件相同的目录下，以确保插件能够正确调用
+# 3.代码页面鼠标点击切换至需要分离的头文件页面，使用设定的快捷键激活使用
+# 4.本脚本为简化版本，在复杂代码场景下可能无法正确分割类文件。为避免不必要的问题，使用前请做好代码版本控制
+# Author: YANGGQ.SW
+
+# 前缀映射具体规则 如 SW 检测需要分离的类名为 SWTest 输出分离后的文件名为 swcore-test.hpp  swcore-test.cpp
+# 应确保主体被分离文件中存在的主类名可以被正确映射为被分离文件名，已方便处理，
+# 如被分离的头文件为 swauto-test.hpp 那么该头文件内的主体类应该为 SWATest 通过此映射["SWA", "swauto"]可以得到 swauto-test.hpp
+# 如有必要时可重构此脚本代码实现更为高级的映射机制与分离机制
+
+# ############################################## #  
 
 if __name__ == '__main__':
 
-     ###############################################
-    # 使用说明:
-    # 1.安装 Python 与必要的导入类 chardet 
-    # 2.将本 Python 文件(swsync-partition.py)放置于与你的项目.vcxproj 文件相同的目录下，以确保插件能够正确调用
-    # 3.代码页面鼠标点击切换至需要分离的头文件页面，使用设定的快捷键激活使用
-    # 4.本脚本为简化版本，在复杂代码场景下可能无法正确分割类文件。为避免不必要的问题，使用前请做好代码版本控制
-    # Author: YANGGQ.SW
-    ######################不可修改###################
-   
-    header_file_path = sys.argv[2].replace("\"", "")
-   
-    #################################################
+    # ################此处不可随意修改################ #
 
+    header_file_path = sys.argv[2].replace("\"", "")    
     split_files = separate_classes(header_file_path)
     for file_path in split_files:
         print(file_path)
     sys.exit(0)
+    # ############################################## #
+    
